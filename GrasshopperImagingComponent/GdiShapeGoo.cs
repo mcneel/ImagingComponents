@@ -141,6 +141,7 @@ namespace GrasshopperImagingComponent
           graphics.FillPolygon(fill, polygon);
       }
     }
+
     #endregion
 
     #region deserialization

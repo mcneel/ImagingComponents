@@ -1,3 +1,6 @@
 /.vs/GrasshopperImagingComponent/v15/*.suo
 /*.user
 /GrasshopperImagingComponent/*.user
+/GrasshopperImagingComponent/bin
+/GrasshopperImagingComponent/obj
+/GrasshopperImagingComponent/dist

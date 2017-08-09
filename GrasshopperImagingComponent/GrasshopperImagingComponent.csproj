@@ -92,8 +92,10 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>Copy "$(TargetPath)" "$(TargetDir)$(ProjectName).gha"
- 
-Erase "$(TargetPath)"</PostBuildEvent>
+    <PostBuildEvent>mkdir "$(ProjectDir)dist\"
+copy "$(TargetPath)" "$(ProjectDir)dist\$(ProjectName).gha"
+
+copy "$(TargetPath)" "$(TargetDir)$(ProjectName).gha"
+erase "$(TargetPath)"</PostBuildEvent>
   </PropertyGroup>
 </Project>
