@@ -4,7 +4,7 @@ using Grasshopper.Kernel;
 
 namespace GrasshopperImagingComponent
 {
-  public sealed class GhaInformation : Grasshopper.Kernel.GH_AssemblyInfo
+  public sealed class GhaInformation : GH_AssemblyInfo
   {
     public override string AuthorContact
     {
@@ -23,7 +23,7 @@ namespace GrasshopperImagingComponent
 
     public override string Version
     {
-      get { return "1.0.1"; }
+      get { return "1.0.2"; }
     }
     public override string Name
     {

@@ -5,14 +5,28 @@ using System.Linq;
 using GH_IO;
 using GH_IO.Serialization;
 using GH_IO.Types;
-using Grasshopper.Kernel;
 using Grasshopper.Kernel.Types;
-using Rhino;
 using Rhino.Geometry;
 
 namespace GrasshopperImagingComponent
 {
-  public sealed class GdiShapeGoo : IGH_Goo
+  /// <summary>
+  /// Base interface for all drawable elements.
+  /// </summary>
+  public interface IGdiGoo : IGH_Goo
+  {
+    /// <summary>
+    /// Draw this shape onto a bitmap.
+    /// </summary>
+    /// <param name="graphics">Graphics object to draw with.</param>
+    /// <param name="cache">Gdi cache.</param>
+    void DrawShape(Graphics graphics, GdiCache cache);
+  }
+
+  /// <summary>
+  /// Implementation of IGdiGoo for polygon shapes.
+  /// </summary>
+  public sealed class GdiShapeGoo : IGdiGoo
   {
     #region fields
     private Point3d[] _points;
@@ -101,9 +115,6 @@ namespace GrasshopperImagingComponent
     /// </summary>
     /// <param name="graphics">Graphics object to draw with.</param>
     /// <param name="cache">Gdi cache.</param>
-    /// <param name="boundary">Bitmap boundary in world space.</param>
-    /// <param name="width">Horizontal resolution.</param>
-    /// <param name="height">Vertical resolution.</param>
     public void DrawShape(Graphics graphics, GdiCache cache)
     {
       if (!IsValid) return;
@@ -127,7 +138,7 @@ namespace GrasshopperImagingComponent
     {
       foreach (string description in _edges)
       {
-        Pen pen = cache.ParseEdge(description, out string message);
+        Pen pen = cache.ParseEdge(description, out string _);
         if (pen != null)
           graphics.DrawLines(pen, polygon);
       }
@@ -136,12 +147,11 @@ namespace GrasshopperImagingComponent
     {
       foreach (string description in _fills)
       {
-        Brush fill = cache.ParseFill(description, out string message);
+        Brush fill = cache.ParseFill(description, out string _);
         if (fill != null)
           graphics.FillPolygon(fill, polygon);
       }
     }
-
     #endregion
 
     #region deserialization
@@ -188,94 +198,146 @@ namespace GrasshopperImagingComponent
     #endregion
   }
 
-  public sealed class BitmapProjection
+  /// <summary>
+  /// Implementation of IGdiGoo for text.
+  /// </summary>
+  public sealed class GdiTextGoo : IGdiGoo
   {
-    private readonly Plane _plane;
-    private readonly double _uFactor;
-    private readonly double _vFactor;
+    #region constructors
+    public GdiTextGoo()
+    {
+      Text = string.Empty;
+      Font = string.Empty;
+      Location = Point3d.Origin;
+      Colour = Color.Transparent;
+    }
+    public GdiTextGoo(string text, string font, Point3d location, Color colour)
+    {
+      Text = text;
+      Font = font;
+      Location = location;
+      Colour = colour;
+    }
+    #endregion
 
+    #region properties
     /// <summary>
-    /// Create a new projection.
+    /// Gets the text to draw.
     /// </summary>
-    /// <param name="boundary">Bitmap boundary.</param>
-    /// <param name="width">Horizontal resolution.</param>
-    /// <param name="height">Vertical resolution.</param>
-    public BitmapProjection(Rectangle3d boundary, int width, int height)
-    {
-      Boundary = boundary;
-      Width = width;
-      Height = height;
-
-      _plane = boundary.Plane;
-      _plane.Origin = boundary.Corner(0);
-
-      _uFactor = 1.0 / boundary.Width;
-      _vFactor = 1.0 / boundary.Height;
-    }
-
+    public string Text { get; private set; }
     /// <summary>
-    /// Gets the boundary of the bitmap in world space.
+    /// Gets the font to use.
     /// </summary>
-    public Rectangle3d Boundary { get; }
+    public string Font { get; private set; }
     /// <summary>
-    /// Gets the number of pixels along the width of the bitmap.
+    /// Gets the location.
     /// </summary>
-    public int Width { get; }
+    public Point3d Location { get; private set; }
     /// <summary>
-    /// Gets the number of pixels along the height of the bitmap.
+    /// Gets the colour.
     /// </summary>
-    public int Height { get; }
+    public Color Colour { get; private set; }
 
+    public bool IsValid
+    {
+      get
+      {
+        if (string.IsNullOrWhiteSpace(Text)) return false;
+        if (string.IsNullOrWhiteSpace(Font)) return false;
+        if (!Location.IsValid) return false;
+        return true;
+      }
+    }
+    string IGH_Goo.IsValidWhyNot
+    {
+      get
+      {
+        if (string.IsNullOrWhiteSpace(Text)) return "No text";
+        if (string.IsNullOrWhiteSpace(Font)) return "No font";
+        if (!Location.IsValid) return "Invalid location";
+        return null;
+      }
+    }
+    string IGH_Goo.TypeName
+    {
+      get { return "GDI+ text"; }
+    }
+    string IGH_Goo.TypeDescription
+    {
+      get { return "A text entity drawn to a GDI+ bitmap."; }
+    }
+    #endregion
+
+    #region casting
+    IGH_Goo IGH_Goo.Duplicate()
+    {
+      GdiTextGoo goo = new GdiTextGoo(Text, Font, Location, Colour);
+      return goo;
+    }
+    IGH_GooProxy IGH_Goo.EmitProxy()
+    {
+      return null;
+    }
+    bool IGH_Goo.CastFrom(object source)
+    {
+      return false;
+    }
+    bool IGH_Goo.CastTo<T>(out T target)
+    {
+      target = default(T);
+      return false;
+    }
+    object IGH_Goo.ScriptVariable()
+    {
+      return this;
+    }
+    #endregion
+
+    #region drawing
     /// <summary>
-    /// Map a point from world space to bitmap space.
+    /// Draw this shape onto a bitmap.
     /// </summary>
-    /// <param name="point">Point in world space.</param>
-    public PointF MapToBitmap(Point3d point)
+    /// <param name="graphics">Graphics object to draw with.</param>
+    /// <param name="cache">Gdi cache.</param>
+    public void DrawShape(Graphics graphics, GdiCache cache)
     {
-      _plane.ClosestParameter(point, out double u, out double v);
-      u = Width * u * _uFactor;
-      v = Height * v * _vFactor;
-      v = Height - v;
-      return new PointF((float)u, (float)v);
-    }
-  }
+      if (!IsValid) return;
 
-  public sealed class GdiShapeParameter : GH_PersistentParam<GdiShapeGoo>
-  {
-    public GdiShapeParameter()
-      : base("Gdi geometry", "GdiGeo", "Store shapes/geometry used in drawing images.", "Display", "Image")
-    { }
-    public GdiShapeParameter(GH_InstanceDescription nTag) : base(nTag) { }
-    public GdiShapeParameter(GH_InstanceDescription nTag, bool bIsListParam) : base(nTag, bIsListParam) { }
-    public GdiShapeParameter(string name, string nickname, string description, string category, string subcategory)
-      : base(name, nickname, description, category, subcategory) { }
+      PointF point = cache.Projection.MapToBitmap(Location);
+      Font font = cache.ParseFont(Font, out string _);
+      if (font == null)
+        font = SystemFonts.CaptionFont;
 
-    public static readonly Guid _componentId = new Guid("{84BC010B-3D24-4A42-A262-F6B7AA1EDAEE}");
-    public override Guid ComponentGuid
-    {
-      get { return _componentId; }
-    }
-    public override GH_Exposure Exposure
-    {
-      get { return GH_Exposure.hidden; }
-    }
-    protected override Bitmap Icon
-    {
-      get { return base.Icon; }
-    }
+      Brush fill = new SolidBrush(Colour);
+      SizeF size = graphics.MeasureString(Text, font);
+      point.X -= 0.5f * size.Width;
+      point.Y -= 0.5f * size.Height;
 
-    protected override GH_GetterResult Prompt_Singular(ref GdiShapeGoo value)
-    {
-      return GH_GetterResult.cancel;
+      graphics.DrawString(Text, font, fill, point);
+      fill.Dispose();
     }
-    protected override GH_GetterResult Prompt_Plural(ref List<GdiShapeGoo> values)
-    {
-      return GH_GetterResult.cancel;
-    }
+    #endregion
 
-    protected override GdiShapeGoo InstantiateT()
+    #region deserialization
+    bool GH_ISerializable.Write(GH_IWriter writer)
     {
-      return new GdiShapeGoo();
+      writer.SetString("Text", Text);
+      writer.SetString("Font", Font);
+      writer.SetPoint3D("Location", new GH_Point3D(Location.X, Location.Y, Location.Z));
+      writer.SetDrawingColor("Colour", Colour);
+      return true;
     }
+    bool GH_ISerializable.Read(GH_IReader reader)
+    {
+      var pt = reader.GetPoint3D("Location");
+
+      Text = reader.GetString("Text");
+      Font = reader.GetString("Font");
+      Location = new Point3d(pt.x, pt.y, pt.z);
+      Colour = reader.GetDrawingColor("Colour");
+
+      return true;
+    }
+    #endregion
   }
 }

@@ -38,7 +38,7 @@ namespace GrasshopperImagingComponent
     }
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
     {
-      pManager.AddParameter(new GdiShapeParameter(), "Shape", "S", "GDI+ Shape", GH_ParamAccess.item);
+      pManager.AddParameter(new GdiGooParameter(), "Shape", "S", "GDI+ Shape", GH_ParamAccess.item);
     }
     protected override void SolveInstance(IGH_DataAccess access)
     {
@@ -114,7 +114,7 @@ namespace GrasshopperImagingComponent
     }
     protected override void RegisterOutputParams(GH_OutputParamManager pManager)
     {
-      pManager.AddParameter(new GdiShapeParameter(), "Shape", "S", "GDI+ Shape", GH_ParamAccess.item);
+      pManager.AddParameter(new GdiGooParameter(), "Shape", "S", "GDI+ Shape", GH_ParamAccess.item);
     }
     protected override void SolveInstance(IGH_DataAccess access)
     {

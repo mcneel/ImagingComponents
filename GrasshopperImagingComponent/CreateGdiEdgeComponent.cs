@@ -80,4 +80,51 @@ namespace GrasshopperImagingComponent
       get { return Properties.Resources.Edge_24x24; }
     }
   }
+
+  public sealed class CreateGdiFontComponent : GH_Component
+  {
+    public CreateGdiFontComponent()
+      : base("Create Gdi Font", "Font", "Create a GDI+ font description.", "Display", "Image")
+    { }
+
+    protected override void RegisterInputParams(GH_InputParamManager pManager)
+    {
+      pManager.AddTextParameter("Typeface", "T", "Typeface name.", GH_ParamAccess.item, FontFamily.GenericSansSerif.Name);
+      pManager.AddNumberParameter("Size", "S", "Font size (in Rhino units).", GH_ParamAccess.item, 1);
+      pManager.AddBooleanParameter("Bold", "B", "Bold state", GH_ParamAccess.item, false);
+      pManager.AddBooleanParameter("Italic", "I", "Italic state", GH_ParamAccess.item, false);
+    }
+    protected override void RegisterOutputParams(GH_OutputParamManager pManager)
+    {
+      pManager.AddTextParameter("Font", "F", "Font description", GH_ParamAccess.item);
+    }
+    protected override void SolveInstance(IGH_DataAccess access)
+    {
+      string name = string.Empty;
+      double size = 0.0;
+      bool bold = false;
+      bool italic = false;
+
+      if (!access.GetData(0, ref name)) return;
+      if (!access.GetData(1, ref size)) return;
+      if (!access.GetData(2, ref bold)) return;
+      if (!access.GetData(3, ref italic)) return;
+
+      access.SetData(0, GdiCache.FormatFont(name, (float)size, bold, italic));
+    }
+
+    public static readonly Guid _componentId = new Guid("{5F4D11BA-C072-4C6B-84F3-C7B9757C86E4}");
+    public override Guid ComponentGuid
+    {
+      get { return _componentId; }
+    }
+    public override GH_Exposure Exposure
+    {
+      get { return GH_Exposure.primary | GH_Exposure.obscure; }
+    }
+    protected override Bitmap Icon
+    {
+      get { return Properties.Resources.Font_24x24; }
+    }
+  }
 }

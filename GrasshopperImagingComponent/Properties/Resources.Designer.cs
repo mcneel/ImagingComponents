@@ -93,6 +93,16 @@ namespace GrasshopperImagingComponent.Properties {
         /// <summary>
         ///   Looks up a localized resource of type System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap Font_24x24 {
+            get {
+                object obj = ResourceManager.GetObject("Font_24x24", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap GradientFill_24x24 {
             get {
                 object obj = ResourceManager.GetObject("GradientFill_24x24", resourceCulture);
@@ -116,6 +126,16 @@ namespace GrasshopperImagingComponent.Properties {
         internal static System.Drawing.Bitmap SolidFill_24x24 {
             get {
                 object obj = ResourceManager.GetObject("SolidFill_24x24", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized resource of type System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap Text_24x24 {
+            get {
+                object obj = ResourceManager.GetObject("Text_24x24", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.Drawing.Text;
 using Grasshopper.Kernel;
 using Grasshopper.Kernel.Parameters;
 using Rhino.Geometry;
@@ -31,7 +32,7 @@ namespace GrasshopperImagingComponent
 
     protected override void RegisterInputParams(GH_InputParamManager pManager)
     {
-      var shapeParam = new GdiShapeParameter();
+      var shapeParam = new GdiGooParameter();
       pManager.AddParameter(shapeParam, "Shapes", "S", "Shapes to draw", GH_ParamAccess.list);
       pManager.AddRectangleParameter("Size", "S", "Bitmap size and orientation", GH_ParamAccess.item,
         new Rectangle3d(Plane.WorldXY, 100, 100));
@@ -50,7 +51,7 @@ namespace GrasshopperImagingComponent
     }
     protected override void SolveInstance(IGH_DataAccess access)
     {
-      List<GdiShapeGoo> shapes = new List<GdiShapeGoo>();
+      List<IGdiGoo> shapes = new List<IGdiGoo>();
       Rectangle3d boundary = Rectangle3d.Unset;
       double factor = 1.0;
       Color background = Color.Transparent;
@@ -97,9 +98,10 @@ namespace GrasshopperImagingComponent
       Graphics graphics = Graphics.FromImage(image);
       graphics.Clear(background);
       graphics.SmoothingMode = antialias ? SmoothingMode.HighQuality : SmoothingMode.None;
+      graphics.TextRenderingHint = antialias ? TextRenderingHint.AntiAliasGridFit : TextRenderingHint.SingleBitPerPixelGridFit;
 
       GdiCache cache = new GdiCache(projection);
-      foreach (GdiShapeGoo shape in shapes)
+      foreach (IGdiGoo shape in shapes)
         shape.DrawShape(graphics, cache);
       cache.Clear();
       graphics.Dispose();

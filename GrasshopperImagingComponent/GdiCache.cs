@@ -61,6 +61,9 @@ namespace GrasshopperImagingComponent
       _fonts.Clear();
     }
 
+    /// <summary>
+    /// Gets the projection associated with this cache.
+    /// </summary>
     public BitmapProjection Projection { get; }
     #endregion
 
@@ -73,11 +76,7 @@ namespace GrasshopperImagingComponent
       List<string> fragments = new List<string>(5);
 
       fragments.Add(string.Format("width={0:0.##}", width));
-
-      if (colour.A == 255)
-        fragments.Add(string.Format("colour=({0},{1},{2})", colour.R, colour.G, colour.B));
-      else
-        fragments.Add(string.Format("colour=({0},{1},{2},{3})", colour.R, colour.G, colour.B, colour.A));
+      fragments.Add("colour=" + ExtensionMethods.FormatColour(colour));
 
       for (int i = 0; i < _capValues.Length; i++)
         if (_capValues[i] == cap)
@@ -99,19 +98,12 @@ namespace GrasshopperImagingComponent
 
       return "edge: " + string.Join(", ", fragments);
     }
-
     /// <summary>
     /// Create a valid descriptor of a fill.
     /// </summary>
     public static string FormatFill(Color colour)
     {
-      string c;
-      if (colour.A == 255)
-        c = string.Format("colour=({0},{1},{2})", colour.R, colour.G, colour.B);
-      else
-        c = string.Format("colour=({0},{1},{2},{3})", colour.R, colour.G, colour.B, colour.A);
-
-      return "fill: " + c;
+      return "fill: " + "colour=" + ExtensionMethods.FormatColour(colour);
     }
     /// <summary>
     /// Create a valid descriptor of a fill.
@@ -121,29 +113,30 @@ namespace GrasshopperImagingComponent
       if (colour1 == colour2)
         return FormatFill(colour1);
 
-      List<string> fragments = new List<string>(5);
-
-      if (colour1.A == 255)
-        fragments.Add(string.Format("colour1=({0},{1},{2})", colour1.R, colour1.G, colour1.B));
-      else
-        fragments.Add(string.Format("colour1=({0},{1},{2},{3})", colour1.R, colour1.G, colour1.B, colour1.A));
-
-      if (colour2.A == 255)
-        fragments.Add(string.Format("colour2=({0},{1},{2})", colour2.R, colour2.G, colour2.B));
-      else
-        fragments.Add(string.Format("colour2=({0},{1},{2},{3})", colour2.R, colour2.G, colour2.B, colour2.A));
-
-      if (Math.Abs(point1.Z) < 1e-12)
-        fragments.Add(string.Format("point1=({0:0.##}, {1:0.##})", point1.X, point1.Y));
-      else
-        fragments.Add(string.Format("point1=({0:0.##}, {1:0.##}, {2:0.##})", point1.X, point1.Y, point1.Z));
-
-      if (Math.Abs(point2.Z) < 1e-12)
-        fragments.Add(string.Format("point2=({0:0.##}, {1:0.##})", point2.X, point2.Y));
-      else
-        fragments.Add(string.Format("point2=({0:0.##}, {1:0.##}, {2:0.##})", point2.X, point2.Y, point2.Z));
-
+      string[] fragments = new string[6];
+      fragments[0] = "colour1=" + ExtensionMethods.FormatColour(colour1);
+      fragments[1] = "colour2=" + ExtensionMethods.FormatColour(colour2);
+      fragments[2] = "point1=" + ExtensionMethods.FormatPoint(point1);
+      fragments[3] = "point2=" + ExtensionMethods.FormatPoint(point2);
+      fragments[4] = "flip=yes";
+      fragments[5] = "gamma=no";
       return "fill: " + string.Join(", ", fragments);
+    }
+    /// <summary>
+    /// Create a valid descriptor of a font.
+    /// </summary>
+    /// <param name="typeface">Typeface name.</param>
+    /// <param name="size">Point size.</param>
+    /// <param name="bold">True if bold (assuming available in typeface).</param>
+    /// <param name="italic">True if italic (assuming available in typeface).</param>
+    public static string FormatFont(string typeface, float size, bool bold, bool italic)
+    {
+      string[] fragments = new string[4];
+      fragments[0] = "typeface=" + typeface;
+      fragments[1] = "size=" + string.Format("{0:0.##}", size);
+      fragments[2] = "bold=" + (bold ? "yes" : "no");
+      fragments[3] = "italic=" + (italic ? "yes" : "no");
+      return "font: " + string.Join(", ", fragments);
     }
     #endregion
 
@@ -161,12 +154,299 @@ namespace GrasshopperImagingComponent
     */
 
     /// <summary>
+    /// Parse a piece of string and return the Pen it describes. 
+    /// Do *not* dispose of the object returned by this method and
+    /// do *not* cache it.
+    /// </summary>
+    /// <param name="description">Pen description.</param>
+    /// <param name="message">If parsing is not successful, the error message will be returned here.</param>
+    /// <returns>Pen on successful parse, or null.</returns>
+    public Pen ParseEdge(string description, out string message)
+    {
+      description = description.ToLowerInvariant();
+      message = null;
+
+      if (_edges.TryGetValue(description, out Pen edge))
+        return edge;
+
+      Dictionary<string, string> dic = ExtensionMethods.ParseDescription(description, out message);
+      if (dic == null)
+        return null;
+
+      if (!string.Equals(dic["type"], "edge", StringComparison.Ordinal))
+      {
+        message = "This is not an edge descriptor.";
+        return null;
+      }
+      if (!dic.ContainsKey("width"))
+      {
+        message = "Pen description does not contain a width value.";
+        return null;
+      }
+      if (!dic.ContainsKey("colour"))
+      {
+        message = "Pen description does not contain a colour value.";
+        return null;
+      }
+
+      if (!float.TryParse(dic["width"], out float width))
+      {
+        message = "Width value is not a valid number.";
+        return null;
+      }
+      if (!ExtensionMethods.TryParseColour(dic["colour"], out Color colour))
+      {
+        message = "Colour value is not valid.";
+        return null;
+      }
+
+      LineCap lineCap = LineCap.Round;
+      if (dic.TryGetValue("cap", out string cap))
+        lineCap = ExtensionMethods.ParseNamedValues(cap, _capNames, _capValues, lineCap);
+
+      DashCap dashCap = DashCap.Flat;
+      if (dic.TryGetValue("dashcap", out string dashcap))
+        dashCap = ExtensionMethods.ParseNamedValues(dashcap, _dashCapNames, _dashCapValues, dashCap);
+
+      float[] pattern = null;
+      if (dic.TryGetValue("pattern", out string dashes))
+      {
+        pattern = ExtensionMethods.ToFloatArray(dashes);
+        if (pattern == null)
+        {
+          message = "Invalid dash pattern.";
+          return null;
+        }
+      }
+
+      edge = new Pen(colour, width)
+      {
+        StartCap = lineCap,
+        EndCap = lineCap,
+        DashCap = dashCap,
+        LineJoin = LineJoin.Round
+      };
+
+      if (pattern != null && pattern.Length > 0)
+        edge.DashPattern = pattern;
+
+      ReleaseMemoryPressure();
+      _edges.Add(description, edge);
+      return edge;
+    }
+
+    public static readonly string[] _capNames = { "flat", "round", "square", "sharp", "dot", "box", "arrow" };
+    public static readonly LineCap[] _capValues = { LineCap.Flat, LineCap.Round, LineCap.Square, LineCap.Triangle, LineCap.RoundAnchor, LineCap.SquareAnchor, LineCap.ArrowAnchor };
+    public static readonly string[] _dashCapNames = { "flat", "round", "sharp" };
+    public static readonly DashCap[] _dashCapValues = { DashCap.Flat, DashCap.Round, DashCap.Triangle };
+
+    /// <summary>
+    /// Parse a piece of string and return the Brush it describes. 
+    /// Do *not* dispose of the object returned by this method and
+    /// do *not* cache it.
+    /// </summary>
+    /// <param name="description">Brush description.</param>
+    /// <param name="message">If parsing is not successful, the error message will be returned here.</param>
+    /// <returns>Brush on successful parse, or null.</returns>
+    public Brush ParseFill(string description, out string message)
+    {
+      description = description.ToLowerInvariant();
+      message = null;
+
+      if (_fills.TryGetValue(description, out Brush fill))
+        return fill;
+
+      Dictionary<string, string> dic = ExtensionMethods.ParseDescription(description, out message);
+      if (dic == null)
+        return null;
+
+      if (!dic["type"].Equals("fill", StringComparison.OrdinalIgnoreCase))
+      {
+        message = "Descriptor is not a fill type.";
+        return null;
+      }
+
+      // Solid fills.
+      if (dic.TryGetValue("colour", out string colour))
+      {
+        if (ExtensionMethods.TryParseColour(colour, out Color solidColour))
+        {
+          ReleaseMemoryPressure();
+          fill = new SolidBrush(solidColour);
+          _fills.Add(description, fill);
+          return fill;
+        }
+        message = "Invalid colour field";
+        return null;
+      }
+
+      // Gradient fills.
+      dic.TryGetValue("colour1", out string colour1);
+      dic.TryGetValue("colour2", out string colour2);
+      dic.TryGetValue("point1", out string point1);
+      dic.TryGetValue("point2", out string point2);
+
+      if (string.IsNullOrWhiteSpace(colour1) ||
+          string.IsNullOrWhiteSpace(colour2) ||
+          string.IsNullOrWhiteSpace(point1) ||
+          string.IsNullOrWhiteSpace(point2))
+      {
+        message = "Invalid gradient";
+        return null;
+      }
+
+      if (!ExtensionMethods.TryParseColour(colour1, out Color linearColour1))
+      {
+        message = "Invalid colour1 entry.";
+        return null;
+      }
+      if (!ExtensionMethods.TryParseColour(colour2, out Color linearColour2))
+      {
+        message = "Invalid colour2 entry.";
+        return null;
+      }
+      if (!ExtensionMethods.TryParsePoint(point1, out Point3d linearPoint1))
+      {
+        message = "Invalid point1 entry.";
+        return null;
+      }
+      if (!ExtensionMethods.TryParsePoint(point2, out Point3d linearPoint2))
+      {
+        message = "Invalid point2 entry.";
+        return null;
+      }
+
+      PointF p1 = Projection.MapToBitmap(linearPoint1);
+      PointF p2 = Projection.MapToBitmap(linearPoint2);
+
+      LinearGradientBrush gradient = new LinearGradientBrush(p1, p2, linearColour1, linearColour2)
+      {
+        GammaCorrection = dic.GetYesNo("gamma", true),
+        WrapMode = dic.GetYesNo("flip", true) ? WrapMode.TileFlipXY : WrapMode.Tile
+      };
+      fill = gradient;
+
+      ReleaseMemoryPressure();
+      _fills.Add(description, fill);
+      return fill;
+    }
+
+    /// <summary>
+    /// Parse a piece of string and return the Font it describes. 
+    /// Do *not* dispose of the object returned by this method and
+    /// do *not* cache it.
+    /// </summary>
+    /// <param name="description">Font description.</param>
+    /// <param name="message">If parsing is not successful, the error message will be returned here.</param>
+    /// <returns>Font on successful parse, or null.</returns>
+    public Font ParseFont(string description, out string message)
+    {
+      description = description.ToLowerInvariant();
+      message = null;
+
+      if (_fonts.TryGetValue(description, out Font font))
+        return font;
+
+      Dictionary<string, string> dic = ExtensionMethods.ParseDescription(description, out message);
+      if (dic == null)
+        return null;
+
+      if (!dic["type"].Equals("font", StringComparison.OrdinalIgnoreCase))
+      {
+        message = "Descriptor is not a font type.";
+        return null;
+      }
+      if (!dic.ContainsKey("typeface"))
+      {
+        message = "Descriptor does not contain a typeface entry.";
+        return null;
+      }
+      if (!dic.ContainsKey("size"))
+      {
+        message = "Descriptor does not contain a size entry.";
+        return null;
+      }
+
+      FontFamily fontFamily = FontFamily.GenericSansSerif;
+      if (dic.TryGetValue("typeface", out string typeface))
+        foreach (FontFamily family in FontFamily.Families)
+          if (family.Name.Equals(typeface, StringComparison.OrdinalIgnoreCase))
+          {
+            fontFamily = family;
+            break;
+          }
+
+      float size = 1.0f;
+      if (dic.TryGetValue("size", out string sizeValue))
+      {
+        if (!float.TryParse(sizeValue, out size))
+        {
+          message = "Size entry is incorrectly formatted: " + sizeValue;
+          return null;
+        }
+        if (size < 1e-4)
+        {
+          message = "Size entry is too small.";
+          return null;
+        }
+      }
+
+      float emSize = size; // TODO: scale based on projection.
+
+      bool bold = dic.GetYesNo("bold", false);
+      bool italic = dic.GetYesNo("italic", false);
+
+      FontStyle style = FontStyle.Regular;
+      if (bold) style = FontStyle.Bold;
+      if (italic) style = style | FontStyle.Italic;
+      
+      font = new Font(fontFamily, emSize, style);
+      
+      ReleaseMemoryPressure();
+      _fonts.Add(description, font);
+      return font;
+    }
+    #endregion
+  }
+
+  /// <summary>
+  /// Some useful extension and static methods.
+  /// </summary>
+  public static class ExtensionMethods
+  {
+    #region formatters
+    /// <summary>
+    /// Format a colour.
+    /// </summary>
+    /// <param name="colour">Colour to format.</param>
+    /// <returns>Parsable string representation.</returns>
+    public static string FormatColour(Color colour)
+    {
+      if (colour.A == 255)
+        return string.Format("({0},{1},{2})", colour.R, colour.G, colour.B);
+      return string.Format("({0},{1},{2},{3})", colour.R, colour.G, colour.B, colour.A);
+    }
+    /// <summary>
+    /// Format a point.
+    /// </summary>
+    /// <param name="point">Point to format.</param>
+    /// <returns>Parsable string representation.</returns>
+    public static string FormatPoint(Point3d point)
+    {
+      if (Math.Abs(point.Z) < 1e-4)
+        return string.Format("({0:0.####},{1:0.####})", point.X, point.Y);
+      return string.Format("({0:0.####},{1:0.####},{2:0.####})", point.X, point.Y, point.Z);
+    }
+    #endregion
+
+    #region parsers
+    /// <summary>
     /// Parse a description and return the key/value pairs therein.
     /// </summary>
     /// <param name="description">Description to parse.</param>
     /// <param name="message">Error message, if any.</param>
     /// <returns>Description dictionary.</returns>
-    private static Dictionary<string, string> ParseDescription(string description, out string message)
+    public static Dictionary<string, string> ParseDescription(string description, out string message)
     {
       if (string.IsNullOrWhiteSpace(description))
       {
@@ -174,7 +454,7 @@ namespace GrasshopperImagingComponent
         return null;
       }
 
-      // Replace commas inside parenthesis with semi-colons.
+      // Replace commas *inside* parenthesis with semi-colons.
       {
         char[] chars = description.ToCharArray();
         int depth = 0;
@@ -247,10 +527,11 @@ namespace GrasshopperImagingComponent
       message = null;
       return dic;
     }
+
     /// <summary>
     /// Try and parse a colour description.
     /// </summary>
-    private static bool TryParseColour(string text, out Color colour)
+    public static bool TryParseColour(string text, out Color colour)
     {
       colour = Color.Transparent;
 
@@ -281,7 +562,7 @@ namespace GrasshopperImagingComponent
     /// <summary>
     /// Try and parse a point description.
     /// </summary>
-    private static bool TryParsePoint(string text, out Point3d point)
+    public static bool TryParsePoint(string text, out Point3d point)
     {
       point = Point3d.Origin;
 
@@ -302,7 +583,7 @@ namespace GrasshopperImagingComponent
     /// <summary>
     /// Convert a list of textual values to an integer array.
     /// </summary>
-    private static int[] ToIntegerArray(string list)
+    public static int[] ToIntegerArray(string list)
     {
       if (string.IsNullOrWhiteSpace(list)) return null;
       string[] fragments = list.Split(',');
@@ -319,7 +600,7 @@ namespace GrasshopperImagingComponent
     /// <summary>
     /// Convert a list of textual values to a float array.
     /// </summary>
-    private static float[] ToFloatArray(string list)
+    public static float[] ToFloatArray(string list)
     {
       if (string.IsNullOrWhiteSpace(list)) return null;
       string[] fragments = list.Split(',');
@@ -333,10 +614,11 @@ namespace GrasshopperImagingComponent
 
       return values;
     }
+
     /// <summary>
-    /// Parse a set of named constants.
+    /// Parse a set of named values.
     /// </summary>
-    private static T ParseName<T>(string key, string[] keys, T[] values, T defaultValue)
+    public static T ParseNamedValues<T>(string key, string[] keys, T[] values, T defaultValue)
     {
       if (string.IsNullOrWhiteSpace(key)) return defaultValue;
       for (int i = 0; i < keys.Length; i++)
@@ -344,194 +626,59 @@ namespace GrasshopperImagingComponent
           return values[i];
       return defaultValue;
     }
+    #endregion
 
+    #region getters
     /// <summary>
-    /// Parse a piece of string and return the Pen it describes. 
-    /// Do *not* dispose of the object returned by this method and
-    /// do *not* cache it.
+    /// Try and parse a yes/no flag in a dictionary.
     /// </summary>
-    /// <param name="description">Pen description.</param>
-    /// <param name="message">If parsing is not successful, the error message will be returned here.</param>
-    /// <returns>Pen on successful parse, or null.</returns>
-    public Pen ParseEdge(string description, out string message)
+    /// <param name="dictionary">Dictionary to operate on.</param>
+    /// <param name="key">Name of key.</param>
+    /// <param name="defaultValue">Default value in case the flag doesn't exist or is garbled.</param>
+    /// <returns>Boolean value.</returns>
+    public static bool GetYesNo(this Dictionary<string, string> dictionary, string key, bool defaultValue)
     {
-      description = description.ToLowerInvariant();
-      message = null;
-
-      if (_edges.TryGetValue(description, out Pen edge))
-        return edge;
-
-      Dictionary<string, string> dic = ParseDescription(description, out message);
-      if (dic == null)
-        return null;
-
-      // Validate the existence of specific keys.
-      if (!dic.ContainsKey("type"))
-      {
-        message = "Descriptor does not contain a type indicator.";
-        return null;
-      }
-      if (!dic.ContainsKey("width"))
-      {
-        message = "Pen description does not contain a width value.";
-        return null;
-      }
-      if (!dic.ContainsKey("colour"))
-      {
-        message = "Pen description does not contain a colour value.";
-        return null;
-      }
-
-      // Validate the values of specific keys. 
-      if (!string.Equals(dic["type"], "edge", StringComparison.Ordinal))
-      {
-        message = "This is not an edge descriptor.";
-        return null;
-      }
-
-      // Extract values.
-      if (!float.TryParse(dic["width"], out float width))
-      {
-        message = "Width value is not a valid number.";
-        return null;
-      }
-
-      if (!TryParseColour(dic["colour"], out Color colour))
-      {
-        message = "Colour value is not valid.";
-        return null;
-      }
-
-      LineCap lineCap = LineCap.Round;
-      if (dic.TryGetValue("cap", out string cap))
-        lineCap = ParseName(cap, _capNames, _capValues, lineCap);
-
-      DashCap dashCap = DashCap.Flat;
-      if (dic.TryGetValue("dashcap", out string dashcap))
-        dashCap = ParseName(dashcap, _dashCapNames, _dashCapValues, dashCap);
-
-      float[] pattern = null;
-      if (dic.TryGetValue("pattern", out string dashes))
-      {
-        pattern = ToFloatArray(dashes);
-        if (pattern == null)
+      if (dictionary.TryGetValue(key, out string value))
+        if (!string.IsNullOrWhiteSpace(value))
         {
-          message = "Invalid dash pattern.";
-          return null;
+          if (value.StartsWith("y") || value.StartsWith("Y")) return true;
+          if (value.StartsWith("n") || value.StartsWith("N")) return false;
         }
-      }
 
-      edge = new Pen(colour, width)
-      {
-        StartCap = lineCap,
-        EndCap = lineCap,
-        DashCap = dashCap,
-        LineJoin = LineJoin.Round
-      };
-
-      if (pattern != null && pattern.Length > 0)
-        edge.DashPattern = pattern;
-
-      ReleaseMemoryPressure();
-      _edges.Add(description, edge);
-      return edge;
+      return defaultValue;
     }
 
-    public static readonly string[] _capNames = { "flat", "round", "square", "sharp", "dot", "box", "arrow" };
-    public static readonly LineCap[] _capValues = { LineCap.Flat, LineCap.Round, LineCap.Square, LineCap.Triangle, LineCap.RoundAnchor, LineCap.SquareAnchor, LineCap.ArrowAnchor };
-    public static readonly string[] _dashCapNames = { "flat", "round", "sharp" };
-    public static readonly DashCap[] _dashCapValues = { DashCap.Flat, DashCap.Round, DashCap.Triangle };
-
     /// <summary>
-    /// Parse a piece of string and return the Brush it describes. 
-    /// Do *not* dispose of the object returned by this method and
-    /// do *not* cache it.
+    /// Try and parse a colour field in a dictionary.
     /// </summary>
-    /// <param name="description">Brush description.</param>
-    /// <param name="message">If parsing is not successful, the error message will be returned here.</param>
-    /// <returns>Brush on successful parse, or null.</returns>
-    public Brush ParseFill(string description, out string message)
+    /// <param name="dictionary">Dictionary to operate on.</param>
+    /// <param name="key">Name of key.</param>
+    /// <param name="defaultValue">Default value in case the flag doesn't exist or is garbled.</param>
+    /// <returns>Colour.</returns>
+    public static Color GetColour(this Dictionary<string, string> dictionary, string key, Color defaultValue)
     {
-      description = description.ToLowerInvariant();
-      message = null;
+      if (dictionary.TryGetValue(key, out string value))
+        if (!string.IsNullOrWhiteSpace(value))
+          if (TryParseColour(value, out Color colour))
+            return colour;
 
-      if (_fills.TryGetValue(description, out Brush fill))
-        return fill;
+      return defaultValue;
+    }
+    /// <summary>
+    /// Try and parse a point field in a dictionary.
+    /// </summary>
+    /// <param name="dictionary">Dictionary to operate on.</param>
+    /// <param name="key">Name of key.</param>
+    /// <param name="defaultValue">Default value in case the flag doesn't exist or is garbled.</param>
+    /// <returns>Point.</returns>
+    public static Point3d GetPoint(this Dictionary<string, string> dictionary, string key, Point3d defaultValue)
+    {
+      if (dictionary.TryGetValue(key, out string value))
+        if (!string.IsNullOrWhiteSpace(value))
+          if (TryParsePoint(value, out Point3d point))
+            return point;
 
-      Dictionary<string, string> dic = ParseDescription(description, out message);
-      if (dic == null)
-        return null;
-
-      // Validate the existence of specific keys.
-      if (!dic.ContainsKey("type"))
-      {
-        message = "Descriptor does not contain a type indicator.";
-        return null;
-      }
-
-      if (dic.TryGetValue("colour", out string colour))
-      {
-        if (TryParseColour(colour, out Color solidColour))
-        {
-          ReleaseMemoryPressure();
-          fill = new SolidBrush(solidColour);
-          _fills.Add(description, fill);
-          return fill;
-        }
-        message = "Invalid colour field";
-        return null;
-      }
-
-      dic.TryGetValue("colour1", out string colour1);
-      dic.TryGetValue("colour2", out string colour2);
-      dic.TryGetValue("point1", out string point1);
-      dic.TryGetValue("point2", out string point2);
-
-      if (string.IsNullOrWhiteSpace(colour1) ||
-          string.IsNullOrWhiteSpace(colour2) ||
-          string.IsNullOrWhiteSpace(point1) ||
-          string.IsNullOrWhiteSpace(point2))
-      {
-        message = "Invalid gradient";
-        return null;
-      }
-
-      if (!TryParseColour(colour1, out Color linearColour1))
-      {
-        message = "Invalid colour1 entry.";
-        return null;
-      }
-      if (!TryParseColour(colour2, out Color linearColour2))
-      {
-        message = "Invalid colour2 entry.";
-        return null;
-      }
-      if (!TryParsePoint(point1, out Point3d linearPoint1))
-      {
-        message = "Invalid point1 entry.";
-        return null;
-      }
-      if (!TryParsePoint(point2, out Point3d linearPoint2))
-      {
-        message = "Invalid point2 entry.";
-        return null;
-      }
-
-      PointF p1 = Projection.MapToBitmap(linearPoint1);
-      PointF p2 = Projection.MapToBitmap(linearPoint2);
-
-      LinearGradientBrush gradient =
-        new LinearGradientBrush(p1, p2, linearColour1, linearColour2)
-        {
-          GammaCorrection = true,
-          WrapMode = WrapMode.TileFlipXY
-        };
-
-      fill = gradient;
-
-      ReleaseMemoryPressure();
-      _fills.Add(description, fill);
-      return fill;
+      return defaultValue;
     }
     #endregion
   }
