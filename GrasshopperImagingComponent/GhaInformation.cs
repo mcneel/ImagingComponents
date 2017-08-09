@@ -23,7 +23,7 @@ namespace GrasshopperImagingComponent
 
     public override string Version
     {
-      get { return "1.0.2"; }
+      get { return "1.0.3"; }
     }
     public override string Name
     {
