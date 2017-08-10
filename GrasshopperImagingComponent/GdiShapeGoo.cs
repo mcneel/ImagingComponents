@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using GH_IO;
 using GH_IO.Serialization;
@@ -211,12 +212,17 @@ namespace GrasshopperImagingComponent
       Location = Point3d.Origin;
       Colour = Color.Transparent;
     }
-    public GdiTextGoo(string text, string font, Point3d location, Color colour)
+    public GdiTextGoo(string text, string font, Color colour, Point3d location,
+                      double horizontalAlignment, double verticalAlignment, double rotation)
     {
       Text = text;
       Font = font;
-      Location = location;
       Colour = colour;
+      Location = location;
+
+      HorizontalAlignment = horizontalAlignment;
+      VerticalAlignment = verticalAlignment;
+      Rotation = rotation;
     }
     #endregion
 
@@ -233,6 +239,26 @@ namespace GrasshopperImagingComponent
     /// Gets the location.
     /// </summary>
     public Point3d Location { get; private set; }
+
+    /// <summary>
+    /// Gets the rotation (in degrees, clockwise).
+    /// </summary>
+    public double Rotation { get; private set; }
+    /// <summary>
+    /// Gets the horizontal alignment offset.
+    /// -1 = right edge on location.
+    ///  0 = centre on location.
+    /// +1 = left edge on location.
+    /// </summary>
+    public double HorizontalAlignment { get; private set; }
+    /// <summary>
+    /// Gets the vertical alignment offset.
+    /// -1 = bottom edge on location.
+    ///  0 = centre on location.
+    /// +1 = top edge on location.
+    /// </summary>
+    public double VerticalAlignment { get; private set; }
+
     /// <summary>
     /// Gets the colour.
     /// </summary>
@@ -271,7 +297,7 @@ namespace GrasshopperImagingComponent
     #region casting
     IGH_Goo IGH_Goo.Duplicate()
     {
-      GdiTextGoo goo = new GdiTextGoo(Text, Font, Location, Colour);
+      GdiTextGoo goo = new GdiTextGoo(Text, Font, Colour, Location, HorizontalAlignment, VerticalAlignment, Rotation);
       return goo;
     }
     IGH_GooProxy IGH_Goo.EmitProxy()
@@ -304,6 +330,8 @@ namespace GrasshopperImagingComponent
       if (!IsValid) return;
 
       PointF point = cache.Projection.MapToBitmap(Location);
+      PointF anchor = point;
+
       Font font = cache.ParseFont(Font, out string _);
       if (font == null)
         font = SystemFonts.CaptionFont;
@@ -313,7 +341,28 @@ namespace GrasshopperImagingComponent
       point.X -= 0.5f * size.Width;
       point.Y -= 0.5f * size.Height;
 
-      graphics.DrawString(Text, font, fill, point);
+      if (!HorizontalAlignment.Equals(0.0))
+      {
+        float dx = (float)HorizontalAlignment * 0.5f * size.Width;
+        point.X += dx;
+      }
+      if (!VerticalAlignment.Equals(0.0))
+      {
+        float dy = (float)VerticalAlignment * 0.5f * size.Height;
+        point.Y += dy;
+      }
+      if (Rotation.Equals(0.0))
+        graphics.DrawString(Text, font, fill, point);
+      else
+      {
+        System.Drawing.Drawing2D.Matrix matrix = graphics.Transform;
+        System.Drawing.Drawing2D.Matrix rot = matrix.Clone();
+        rot.RotateAt((float)Rotation, anchor);
+        graphics.Transform = rot;
+        graphics.DrawString(Text, font, fill, point);
+        graphics.Transform = matrix;
+      }
+
       fill.Dispose();
     }
     #endregion
@@ -323,8 +372,11 @@ namespace GrasshopperImagingComponent
     {
       writer.SetString("Text", Text);
       writer.SetString("Font", Font);
-      writer.SetPoint3D("Location", new GH_Point3D(Location.X, Location.Y, Location.Z));
       writer.SetDrawingColor("Colour", Colour);
+      writer.SetPoint3D("Location", new GH_Point3D(Location.X, Location.Y, Location.Z));
+      writer.SetDouble("Horizontal", HorizontalAlignment);
+      writer.SetDouble("Vertical", VerticalAlignment);
+      writer.SetDouble("Rotation", Rotation);
       return true;
     }
     bool GH_ISerializable.Read(GH_IReader reader)
@@ -333,9 +385,11 @@ namespace GrasshopperImagingComponent
 
       Text = reader.GetString("Text");
       Font = reader.GetString("Font");
-      Location = new Point3d(pt.x, pt.y, pt.z);
       Colour = reader.GetDrawingColor("Colour");
-
+      Location = new Point3d(pt.x, pt.y, pt.z);
+      HorizontalAlignment = reader.GetDouble("Horizontal");
+      VerticalAlignment = reader.GetDouble("Vertical");
+      Rotation = reader.GetDouble("Rotation");
       return true;
     }
     #endregion
